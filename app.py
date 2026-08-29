@@ -220,7 +220,7 @@ def render_evidence_and_analysis(risk: dict):
 def render_officer_review(recommendation: str):
     st.subheader("OFFICER REVIEW")
     with st.container(border=True):
-        st.markdown(f"**SYSTEM RECOMMENDATION:** {recommendation}")
+        st.markdown(f"**Screening Recommendation:** {recommendation}")
         st.markdown("<br/>", unsafe_allow_html=True)
         c1, c2, c3 = st.columns(3)
         c1.button("Continue Screening", use_container_width=True)
