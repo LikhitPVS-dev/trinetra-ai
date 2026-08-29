@@ -1,49 +1,118 @@
-import streamlit as st
-from PIL import Image
 import time
-import random
+
 class SecurityEngine:
+    # Used purely for the UI prototype to test different output states
+    # Valid options: "LOW RISK", "REVIEW", "HIGH RISK", "INSUFFICIENT EVIDENCE"
+    demo_scenario = "LOW RISK" 
+
     @staticmethod
-    def analyze_document(passport_img, face_img=None):
-        """Mocks the AI analysis pipeline."""
-        # Simulate processing delay
-        time.sleep(2)
+    def analyze_document(passport_img, face_img=None) -> dict:
+        """
+        Main interface for the TRINETRA screening pipeline.
+        Currently returns deterministic mock data based on SecurityEngine.demo_scenario.
+        """
+        # MOCK DELAY (to be removed when real AI inference takes its place)
+        start_time = time.time()
+        time.sleep(1.5) 
         
-        # Generate slightly randomized mock data for demo purposes
-        is_tampered = random.choice([True, False, False, False]) # 25% chance of fake
-        
-        return {
+        # Base deterministic template
+        result = {
+            "processing": {
+                "status": "SUCCESS",
+                "processing_time": 0.0,
+                "pipeline_version": "0.1"
+            },
             "document_info": {
-                "document_type": "P (Passport)",
+                "document_type": "PASSPORT",
                 "issuing_country": "IND",
                 "document_number": "Z9876543",
                 "surname": "SHARMA",
-                "given_names": "ROHAN",
+                "given_names": "ROHAN"
             },
             "ocr": {
+                "status": "SUCCESS",
                 "extracted_text": "P<INDSHARMA<<ROHAN<<<<<<<<<<<<<<<<<<<<<<<\nZ9876543<8IND9001015M2812316<<<<<<<<<<<<<<02",
-                "confidence_score": 98.5
+                "confidence_score": 0.985
             },
             "mrz": {
+                "status": "SUCCESS",
                 "is_valid": True,
-                "checksums_passed": 5,
-                "total_checksums": 5,
                 "dob_match": True,
-                "expiry_match": True
+                "expiry_match": True,
+                "checksums_passed": 2,
+                "total_checksums": 2
             },
             "tampering": {
-                "tampering_detected": is_tampered,
-                "ela_score": 0.85 if is_tampered else 0.12,
-                "anomalies": ["Inconsistent compression near photo"] if is_tampered else ["None detected"]
+                "status": "SUCCESS",
+                "tampering_detected": False,
+                "tamper_score": 0.12,
+                "anomalies": [],
+                "regions": []
             },
             "face_verification": {
-                "provided": face_img is not None,
-                "match_score": random.uniform(85.0, 99.0) if face_img else None,
-                "is_match": True if face_img else False,
+                "status": "NOT_PROVIDED",
+                "provided": False,
+                "match_score": None,
+                "is_match": None
             },
             "risk_assessment": {
-                "overall_score": 85 if is_tampered else 12,
-                "risk_level": "HIGH RISK" if is_tampered else "CLEARED",
-                "evidence": ["High ELA anomaly detected"] if is_tampered else ["All security checks passed"]
+                "overall_score": 12,
+                "risk_level": "LOW RISK",
+                "evidence": ["No significant anomalies detected", "MRZ checks passed", "Document fields are consistent"],
+                "recommendation": "Continue normal screening"
             }
         }
+
+        # Handle face verification input
+        if face_img is not None:
+            result["face_verification"].update({
+                "status": "SUCCESS",
+                "provided": True,
+                "match_score": 92.5,
+                "is_match": True
+            })
+
+        # Apply deterministic scenario modifiers
+        if SecurityEngine.demo_scenario == "HIGH RISK":
+            result["tampering"].update({
+                "tampering_detected": True,
+                "tamper_score": 0.88,
+                "anomalies": ["Digital splicing detected near photo", "Inconsistent ELA compression"]
+            })
+            result["risk_assessment"].update({
+                "overall_score": 95,
+                "risk_level": "HIGH RISK",
+                "evidence": ["Severe tampering anomalies detected in photo region"],
+                "recommendation": "Secondary Review Required. Do not process."
+            })
+            if face_img:
+                result["face_verification"].update({"match_score": 42.1, "is_match": False})
+                result["risk_assessment"]["evidence"].append("Live face does not match document")
+
+        elif SecurityEngine.demo_scenario == "REVIEW":
+            result["mrz"].update({
+                "is_valid": False,
+                "checksums_passed": 1,
+                "expiry_match": False
+            })
+            result["risk_assessment"].update({
+                "overall_score": 65,
+                "risk_level": "REVIEW",
+                "evidence": ["MRZ checksum mismatch", "Expiry date validation failed"],
+                "recommendation": "Verify document expiry and MRZ integrity manually"
+            })
+
+        elif SecurityEngine.demo_scenario == "INSUFFICIENT EVIDENCE":
+            result["processing"]["status"] = "INSUFFICIENT_EVIDENCE"
+            result["ocr"]["status"] = "FAILED"
+            result["mrz"]["status"] = "FAILED"
+            result["tampering"]["status"] = "INSUFFICIENT_EVIDENCE"
+            result["risk_assessment"].update({
+                "overall_score": 0,
+                "risk_level": "INSUFFICIENT EVIDENCE",
+                "evidence": ["Image quality too low for automated processing", "OCR extraction failed"],
+                "recommendation": "Recapture document image for further analysis"
+            })
+
+        result["processing"]["processing_time"] = round(time.time() - start_time, 2)
+        return result
