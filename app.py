@@ -4,149 +4,240 @@ import datetime
 from SecurityEngine import SecurityEngine
 
 # ==========================================
-# UI RENDERING FUNCTIONS
+# UI CONFIGURATION & CSS
 # ==========================================
+st.set_page_config(page_title="TRINETRA | Terminal", layout="wide", initial_sidebar_state="expanded")
 
-def render_header():
-    st.title("🛡️ TRINETRA")
-    st.markdown("### AI-ASSISTED PASSPORT SCREENING")
-    st.caption("SIH 2026 • Problem Statement 26188 | Multimodal document screening and risk assessment for authorized officers.")
-    st.divider()
+# Minimal CSS to format the prominent screening result card and status badges
+st.markdown("""
+<style>
+    .result-card {
+        padding: 1.5rem; border-radius: 8px; margin-bottom: 1rem; border: 1px solid;
+    }
+    .result-low { background-color: #0b2e13; border-color: #1e7e34; color: #d4edda; }
+    .result-review { background-color: #3e3104; border-color: #d39e00; color: #fff3cd; }
+    .result-high { background-color: #421015; border-color: #dc3545; color: #f8d7da; }
+    .result-insufficient { background-color: #2b2f32; border-color: #6c757d; color: #e2e3e5; }
+    .pipeline-step {
+        text-align: center; font-size: 0.85rem; padding: 0.5rem; background-color: #1e1e1e; border-radius: 4px; border: 1px solid #333;
+    }
+</style>
+""", unsafe_allow_html=True)
 
+# ==========================================
+# COMPONENT RENDERERS
+# ==========================================
 def render_sidebar():
     with st.sidebar:
-        st.header("TRINETRA")
-        st.markdown("**Screening Mode:**\nPassport")
-        st.markdown("**System Status:**\nPrototype")
-        st.markdown("**Pipeline Version:**\nv0.1")
+        st.markdown("### TRINETRA")
+        st.markdown("**Screening Mode:** Passport")
+        st.markdown("**System Status:** Prototype")
+        st.markdown("**Pipeline Version:** v0.1")
         st.divider()
-        st.subheader("Demo Controls")
-        SecurityEngine.demo_scenario = st.selectbox(
-            "DEMO MODE SCENARIO", 
-            ["LOW RISK", "REVIEW", "HIGH RISK", "INSUFFICIENT EVIDENCE"],
-            help="Forces the mock engine to output specific deterministic results for UI testing."
-        )
+        
+        with st.expander("⚙ Developer / Demo Mode", expanded=False):
+            st.caption("Developer testing only — does not perform real document analysis.")
+            SecurityEngine.demo_scenario = st.selectbox(
+                "Scenario Control", 
+                ["LOW RISK", "REVIEW", "HIGH RISK", "INSUFFICIENT EVIDENCE"],
+                label_visibility="collapsed"
+            )
+
+def render_header():
+    st.markdown("## INTELLIGENT DOCUMENT SCREENING")
+    st.markdown("#### AI-assisted passport verification and risk assessment")
+    st.caption("TRINETRA | SIH 2026 • Problem Statement 26188")
+    st.divider()
 
 def render_upload_section():
-    col1, col2 = st.columns(2)
-    with col1:
-        st.subheader("Passport Document")
-        passport_file = st.file_uploader("Upload Passport Page", type=['png', 'jpg', 'jpeg'])
-    with col2:
-        st.subheader("Presented Person Image")
-        face_file = st.file_uploader("Upload Live Face Photo (Optional)", type=['png', 'jpg', 'jpeg'])
+    st.subheader("DOCUMENT INPUT")
     
+    c1, c2 = st.columns(2)
+    with c1:
+        st.markdown("**PASSPORT DOCUMENT**")
+        passport_file = st.file_uploader("Upload Passport (Max 10MB)", type=['png', 'jpg', 'jpeg'], key="pass_up", label_visibility="collapsed")
+        if passport_file:
+            # Check programmatic file size (Fallback)
+            if passport_file.size > 10 * 1024 * 1024:
+                st.error("File exceeds 10MB limit.")
+                passport_file = None
+            else:
+                st.image(passport_file, caption="Passport Preview", use_container_width=True)
+                
+    with c2:
+        st.markdown("**PRESENTED PERSON**")
+        face_file = st.file_uploader("Upload Face (Max 10MB)", type=['png', 'jpg', 'jpeg'], key="face_up", label_visibility="collapsed")
+        st.caption("Optional — used for identity verification")
+        if face_file:
+            if face_file.size > 10 * 1024 * 1024:
+                st.error("File exceeds 10MB limit.")
+                face_file = None
+            else:
+                st.image(face_file, caption="Live Capture Preview", width=250)
+
+    st.markdown("<br/>", unsafe_allow_html=True)
     analyze_btn = st.button("ANALYZE DOCUMENT", type="primary", use_container_width=True)
     return passport_file, face_file, analyze_btn
 
-def render_processing_status(processing_time: float):
-    st.success(f"Processing completed in {processing_time} seconds")
+def render_screening_result(risk: dict):
+    level = risk.get("risk_level")
+    
+    css_class = {
+        "LOW RISK": "result-low",
+        "REVIEW": "result-review",
+        "HIGH RISK": "result-high",
+        "INSUFFICIENT EVIDENCE": "result-insufficient"
+    }.get(level, "result-insufficient")
+    
+    st.markdown(f"""
+        <div class="result-card {css_class}">
+            <h4 style="margin:0; opacity: 0.9;">SCREENING RESULT</h4>
+            <h1 style="margin: 5px 0;">{level}</h1>
+            <h3 style="margin: 0; opacity: 0.8;">{risk.get('overall_score')} / 100</h3>
+            <p style="margin-top: 15px; font-weight: bold; font-size: 1.1rem;">{risk.get('recommendation')}</p>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    # Evidence Summary under the card
+    for ev in risk.get("evidence", []):
+        icon = "✓" if level == "LOW RISK" else "⚠️" if level == "REVIEW" else "🚩"
+        st.markdown(f"**{icon}** {ev}")
 
-def render_document_info(doc_info: dict):
+def render_verification_pipeline(res: dict):
+    st.markdown("<br/>", unsafe_allow_html=True)
+    st.subheader("VERIFICATION PIPELINE")
+    cols = st.columns(7)
+    
+    img_qual = "FAIL" if res["processing"]["status"] == "INSUFFICIENT_EVIDENCE" else "PASS"
+    doc_val = "PASS" if res["mrz"]["is_valid"] else "FAIL"
+    ocr_stat = f"{res['ocr']['confidence_score']*100:.1f}%" if res["ocr"]["status"] == "SUCCESS" else "FAIL"
+    mrz_stat = f"{res['mrz']['checksums_passed']} / {res['mrz']['total_checksums']}" if res["mrz"]["status"] == "SUCCESS" else "FAIL"
+    tamp_stat = "HIGH" if res["tampering"]["tampering_detected"] else ("FAIL" if res["tampering"]["status"] != "SUCCESS" else "LOW")
+    
+    face = res["face_verification"]
+    id_stat = "NOT PROVIDED" if face["status"] == "NOT_PROVIDED" else ("MATCH" if face["is_match"] else "MISMATCH")
+    
+    steps = [
+        ("IMAGE QUALITY", img_qual), ("OCR", ocr_stat), ("MRZ", mrz_stat),
+        ("VALIDATION", doc_val), ("TAMPERING", tamp_stat), ("IDENTITY", id_stat),
+        ("RISK", res["risk_assessment"]["risk_level"])
+    ]
+    
+    for col, (label, status) in zip(cols, steps):
+        with col:
+            color = "#dc3545" if status in ["FAIL", "HIGH", "MISMATCH", "HIGH RISK"] else "#ffc107" if status in ["REVIEW"] else "#28a745" if status not in ["NOT PROVIDED", "INSUFFICIENT EVIDENCE"] else "#6c757d"
+            st.markdown(f"""
+            <div class="pipeline-step">
+                <div style="font-weight: bold; margin-bottom: 5px;">{label}</div>
+                <div style="color: {color}; font-weight: 900;">{status}</div>
+            </div>
+            """, unsafe_allow_html=True)
+    st.divider()
+
+def render_document_information(doc: dict):
     st.subheader("DOCUMENT INFORMATION")
     with st.container(border=True):
         c1, c2, c3 = st.columns(3)
-        c1.metric("Document Type", doc_info.get("document_type", "N/A"))
-        c2.metric("Issuing Country", doc_info.get("issuing_country", "N/A"))
-        c3.metric("Document Number", doc_info.get("document_number", "N/A"))
-        c4, c5 = st.columns(2)
-        c4.metric("Surname", doc_info.get("surname", "N/A"))
-        c5.metric("Given Names", doc_info.get("given_names", "N/A"))
+        c1.caption("Document Type"); c1.write(doc.get("document_type"))
+        c2.caption("Issuing Country"); c2.write(doc.get("issuing_country"))
+        c3.caption("Document Number"); c3.write(doc.get("document_number"))
+        
+        c4, c5, c6, c7 = st.columns(4)
+        c4.caption("Surname"); c4.write(doc.get("surname"))
+        c5.caption("Given Names"); c5.write(doc.get("given_names"))
+        c6.caption("Date of Birth"); c6.write(doc.get("date_of_birth"))
+        c7.caption("Expiry Date"); c7.write(doc.get("expiry_date"))
 
-def render_ocr_results(ocr: dict):
-    st.subheader("OCR ANALYSIS")
-    with st.container(border=True):
-        status = ocr.get("status")
-        st.markdown(f"**Status:** {status}")
-        if status == "SUCCESS":
-            st.code(ocr.get("extracted_text", ""), language="text")
-            st.progress(ocr.get("confidence_score", 0.0), text=f"OCR Confidence: {ocr.get('confidence_score', 0.0)*100:.1f}%")
-        else:
-            st.warning("OCR Extraction Failed or Insufficient Evidence.")
+def render_document_integrity(ocr: dict, mrz: dict):
+    st.subheader("DOCUMENT INTEGRITY")
+    c1, c2 = st.columns(2)
+    with c1:
+        with st.container(border=True):
+            st.markdown("**OCR ANALYSIS**")
+            st.caption(f"Status: {ocr.get('status')}")
+            if ocr.get("status") == "SUCCESS":
+                st.code(ocr.get("extracted_text", ""), language="text")
+                st.write(f"Confidence: **{ocr.get('confidence_score', 0)*100:.1f}%**")
+    with c2:
+        with st.container(border=True):
+            st.markdown("**MRZ VALIDATION**")
+            st.caption(f"Status: {mrz.get('status')}")
+            if mrz.get("status") == "SUCCESS":
+                st.write(f"Checksums Passed: **{mrz.get('checksums_passed')} / {mrz.get('total_checksums')}**")
+                st.write(f"MRZ Valid: **{'Yes' if mrz.get('is_valid') else 'No'}**")
+                st.write(f"DOB Match: **{'Yes' if mrz.get('dob_match') else 'No'}**")
+                st.write(f"Expiry Match: **{'Yes' if mrz.get('expiry_match') else 'No'}**")
 
-def render_mrz_results(mrz: dict):
-    st.subheader("MRZ VALIDATION")
-    with st.container(border=True):
-        st.markdown(f"**MRZ Status:** {mrz.get('status')}")
-        c1, c2, c3 = st.columns(3)
-        c1.metric("MRZ Valid", str(mrz.get("is_valid")))
-        c2.metric("DOB Match", str(mrz.get("dob_match")))
-        c3.metric("Expiry Match", str(mrz.get("expiry_match")))
-        st.metric("Checksums", f"{mrz.get('checksums_passed')} / {mrz.get('total_checksums')}")
-
-def render_tampering_results(tamp: dict):
+def render_tampering_analysis(tamp: dict):
     st.subheader("TAMPERING ANALYSIS")
     with st.container(border=True):
         st.markdown(f"**Status:** {tamp.get('status')}")
         if tamp.get("status") == "SUCCESS":
-            st.metric("Tampering Detected", str(tamp.get("tampering_detected")))
-            st.metric("Tamper Score", str(tamp.get("tamper_score")))
+            c1, c2 = st.columns(2)
+            c1.metric("Tampering Detected", "Yes" if tamp.get("tampering_detected") else "No")
+            c2.metric("Tamper Score", f"{tamp.get('tamper_score', 0):.2f}")
+            
+            st.markdown("**Anomalies:**")
             if tamp.get("anomalies"):
-                st.error(f"**Anomalies:** {', '.join(tamp.get('anomalies'))}")
+                for a in tamp.get("anomalies"): st.error(f"🚩 {a}")
             else:
                 st.success("No anomalies detected.")
-        else:
-            st.warning("Tampering analysis could not be completed.")
+                
+            st.markdown("**Suspicious Regions:**")
+            if not tamp.get("regions"):
+                st.info("No suspicious regions reported.")
+            else:
+                st.warning("Regions highlighted on image (Integration Pending)")
 
-def render_face_results(face: dict):
+def render_identity_verification(face: dict):
     st.subheader("IDENTITY VERIFICATION")
     with st.container(border=True):
-        status = face.get("status")
-        st.markdown(f"**Status:** {status}")
-        if status == "NOT_PROVIDED":
-            st.info("Face verification not performed (No image provided).")
-        elif status == "SUCCESS":
-            st.metric("Match Score", f"{face.get('match_score')}%")
-            st.metric("Match Result", str(face.get("is_match")))
+        if face.get("status") == "NOT_PROVIDED":
+            st.markdown("### NOT PROVIDED")
+            st.info("Upload a presented-person image to perform identity verification.")
+        elif face.get("status") == "SUCCESS":
+            c1, c2 = st.columns(2)
+            c1.metric("Match Score", f"{face.get('match_score')}%")
+            c2.metric("Match Result", "MATCH" if face.get("is_match") else "MISMATCH")
+            st.caption("DOCUMENT PHOTO  |  PRESENTED PERSON (Image mapping ready)")
         else:
-            st.warning("Face verification failed.")
+            st.error("Face verification failed.")
 
-def render_risk_assessment(risk: dict):
-    st.subheader("RISK ASSESSMENT")
-    
-    level = risk.get("risk_level")
-    if level == "LOW RISK":
-        color = "green"
-    elif level == "REVIEW":
-        color = "orange"
-    elif level == "HIGH RISK":
-        color = "red"
-    else:
-        color = "gray"
-        
+def render_evidence_and_analysis(risk: dict):
+    st.subheader("EVIDENCE & ANALYSIS")
     with st.container(border=True):
-        st.markdown(f"### <span style='color:{color}'>{level}</span>", unsafe_allow_html=True)
-        st.metric("RISK SCORE", f"{risk.get('overall_score')} / 100")
+        # A simple keyword categorization for the UI list
+        positives = [e for e in risk.get("evidence", []) if "passed" in e or "consistent" in e or "No" in e or "verified" in e]
+        negatives = [e for e in risk.get("evidence", []) if e not in positives]
         
-        st.markdown("**Evidence:**")
-        for ev in risk.get("evidence", []):
-            st.markdown(f"- {ev}")
-            
-        st.markdown(f"**Recommendation:**\n> {risk.get('recommendation')}")
+        if positives:
+            st.markdown("**Positive Indicators**")
+            for p in positives: st.success(p)
+        if negatives:
+            st.markdown("**Warnings / Negative Indicators**")
+            for n in negatives: st.error(n)
 
 def render_officer_review(recommendation: str):
     st.subheader("OFFICER REVIEW")
     with st.container(border=True):
-        st.markdown(f"**System Recommendation:** {recommendation}")
-        st.markdown("Please log your final decision:")
+        st.markdown(f"**SYSTEM RECOMMENDATION:** {recommendation}")
+        st.markdown("<br/>", unsafe_allow_html=True)
         c1, c2, c3 = st.columns(3)
         c1.button("Continue Screening", use_container_width=True)
         c2.button("Secondary Review", use_container_width=True)
         c3.button("Recapture Document", use_container_width=True)
 
-def render_audit_information(processing: dict):
-    with st.expander("Screening Information"):
-        st.markdown(f"**Timestamp:** {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-        st.markdown(f"**Processing Time:** {processing.get('processing_time')}s")
-        st.markdown(f"**Pipeline Version:** {processing.get('pipeline_version')}")
-        st.markdown("**Document Type:** Passport")
+def render_screening_information(processing: dict):
+    st.subheader("SCREENING INFORMATION")
+    with st.container(border=True):
+        st.write(f"**Timestamp:** {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        st.write(f"**Processing Time:** {processing.get('processing_time')}s")
+        st.write(f"**Pipeline Version:** {processing.get('pipeline_version')}")
 
 # ==========================================
-# MAIN APPLICATION LOGIC
+# MAIN EXECUTION
 # ==========================================
 def main():
-    st.set_page_config(page_title="TRINETRA | Passport Screening", layout="wide")
-    
     render_sidebar()
     render_header()
     
@@ -154,40 +245,31 @@ def main():
     
     if analyze_btn:
         if not passport_file:
-            st.error("Please upload a passport document to begin screening.")
+            st.error("Operation Blocked: Passport document is required for screening.")
             return
             
         try:
-            # Convert files to PIL Images for backend processing
+            # Convert inputs
             passport_img = Image.open(passport_file)
             face_img = Image.open(face_file) if face_file else None
             
-            with st.spinner("Processing document..."):
-                # Strictly calling the defined interface
+            with st.spinner("Processing document through pipeline..."):
                 result = SecurityEngine.analyze_document(passport_img, face_img)
-                
-            render_processing_status(result["processing"]["processing_time"])
             
-            # Layout the data
-            col_left, col_right = st.columns([1, 1], gap="large")
+            # --- FULL WIDTH LAYOUT ORDER ---
+            render_screening_result(result["risk_assessment"])
+            render_verification_pipeline(result)
             
-            with col_left:
-                render_risk_assessment(result["risk_assessment"])
-                render_document_info(result["document_info"])
-                render_face_results(result["face_verification"])
-                
-            with col_right:
-                render_tampering_results(result["tampering"])
-                render_mrz_results(result["mrz"])
-                render_ocr_results(result["ocr"])
-                
-            st.divider()
+            render_document_information(result["document_info"])
+            render_document_integrity(result["ocr"], result["mrz"])
+            render_tampering_analysis(result["tampering"])
+            render_identity_verification(result["face_verification"])
+            render_evidence_and_analysis(result["risk_assessment"])
             render_officer_review(result["risk_assessment"]["recommendation"])
-            render_audit_information(result["processing"])
+            render_screening_information(result["processing"])
 
         except Exception as e:
-            st.error("A system error occurred during analysis. Please contact technical support.")
-            st.info("System logs: The uploaded file may be corrupted or in an unsupported format.")
+            st.error("System Fault: An unexpected error occurred during processing.")
 
 if __name__ == "__main__":
     main()

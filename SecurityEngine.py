@@ -1,7 +1,6 @@
 import time
 
 class SecurityEngine:
-    # Used purely for the UI prototype to test different output states
     # Valid options: "LOW RISK", "REVIEW", "HIGH RISK", "INSUFFICIENT EVIDENCE"
     demo_scenario = "LOW RISK" 
 
@@ -9,13 +8,14 @@ class SecurityEngine:
     def analyze_document(passport_img, face_img=None) -> dict:
         """
         Main interface for the TRINETRA screening pipeline.
-        Currently returns deterministic mock data based on SecurityEngine.demo_scenario.
+        Returns deterministic mock data based on SecurityEngine.demo_scenario.
         """
-        # MOCK DELAY (to be removed when real AI inference takes its place)
         start_time = time.time()
-        time.sleep(1.5) 
         
-        # Base deterministic template
+        # TEMPORARY MOCK BEHAVIOR: Artificial delay to simulate AI inference
+        time.sleep(1.2) 
+        
+        # Base deterministic template (LOW RISK)
         result = {
             "processing": {
                 "status": "SUCCESS",
@@ -27,7 +27,9 @@ class SecurityEngine:
                 "issuing_country": "IND",
                 "document_number": "Z9876543",
                 "surname": "SHARMA",
-                "given_names": "ROHAN"
+                "given_names": "ROHAN",
+                "date_of_birth": "1990-01-01",
+                "expiry_date": "2031-12-28"
             },
             "ocr": {
                 "status": "SUCCESS",
@@ -58,7 +60,7 @@ class SecurityEngine:
             "risk_assessment": {
                 "overall_score": 12,
                 "risk_level": "LOW RISK",
-                "evidence": ["No significant anomalies detected", "MRZ checks passed", "Document fields are consistent"],
+                "evidence": ["MRZ checks passed", "Document fields are consistent", "No significant anomalies detected"],
                 "recommendation": "Continue normal screening"
             }
         }
@@ -71,6 +73,7 @@ class SecurityEngine:
                 "match_score": 92.5,
                 "is_match": True
             })
+            result["risk_assessment"]["evidence"].append("Live face match verified")
 
         # Apply deterministic scenario modifiers
         if SecurityEngine.demo_scenario == "HIGH RISK":
@@ -83,11 +86,11 @@ class SecurityEngine:
                 "overall_score": 95,
                 "risk_level": "HIGH RISK",
                 "evidence": ["Severe tampering anomalies detected in photo region"],
-                "recommendation": "Secondary Review Required. Do not process."
+                "recommendation": "Secondary review recommended before further processing"
             })
             if face_img:
                 result["face_verification"].update({"match_score": 42.1, "is_match": False})
-                result["risk_assessment"]["evidence"].append("Live face does not match document")
+                result["risk_assessment"]["evidence"].append("Live face does not match document photo")
 
         elif SecurityEngine.demo_scenario == "REVIEW":
             result["mrz"].update({
@@ -99,7 +102,7 @@ class SecurityEngine:
                 "overall_score": 65,
                 "risk_level": "REVIEW",
                 "evidence": ["MRZ checksum mismatch", "Expiry date validation failed"],
-                "recommendation": "Verify document expiry and MRZ integrity manually"
+                "recommendation": "Additional verification recommended"
             })
 
         elif SecurityEngine.demo_scenario == "INSUFFICIENT EVIDENCE":
