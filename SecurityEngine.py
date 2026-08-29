@@ -1,4 +1,5 @@
 import time
+from models.screening import ScreeningResult
 
 class SecurityEngine:
     # Valid options: "LOW RISK", "REVIEW", "HIGH RISK", "INSUFFICIENT EVIDENCE"
@@ -8,14 +9,14 @@ class SecurityEngine:
     def analyze_document(passport_img, face_img=None) -> dict:
         """
         Main interface for the TRINETRA screening pipeline.
-        Returns deterministic mock data based on SecurityEngine.demo_scenario.
+        Returns deterministic mock data validated against the Pydantic schema.
         """
         start_time = time.time()
         
-        # TEMPORARY MOCK BEHAVIOR: Artificial delay to simulate AI inference
+        # TEMPORARY MOCK BEHAVIOR: Artificial delay
         time.sleep(1.2) 
         
-        # Base deterministic template (LOW RISK)
+        # Base deterministic template
         result = {
             "processing": {
                 "status": "SUCCESS",
@@ -118,4 +119,9 @@ class SecurityEngine:
             })
 
         result["processing"]["processing_time"] = round(time.time() - start_time, 2)
-        return result
+        
+        # ==========================================
+        # VALIDATE SCHEMA BEFORE RETURNING
+        # ==========================================
+        validated_result = ScreeningResult(**result)
+        return validated_result.model_dump()
