@@ -1,12 +1,25 @@
 import cv2
+import os
 from face_verification import TRINETRAFaceVerifier
 
-# Optional: You can test on your webcam real quick!
-verifier = TRINETRAFaceVerifier()
+def main():
+    verifier = TRINETRAFaceVerifier()
+    
+    test_image_path = "test_face.jpg"
+    
+    if not os.path.exists(test_image_path):
+        print(f"ERROR: Please place a real image named '{test_image_path}' in this folder.")
+        print("Don't worry, it is ignored by Git.")
+        return
 
-# Make fake blank images just to see the output structure
-fake_img = cv2.imread("any_pic_on_your_pc.jpg") 
+    img = cv2.imread(test_image_path)
+    
+    print("Testing verification pipeline...")
+    # Passing the same image twice should result in a 100% match
+    result = verifier.verify(img, img)
+    
+    print("\n--- PIPELINE RESULT ---")
+    print(result)
 
-result = verifier.verify(fake_img, fake_img)
-print("Contract Output:")
-print(result)
+if __name__ == "__main__":
+    main()
