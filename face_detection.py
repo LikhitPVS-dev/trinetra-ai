@@ -28,6 +28,6 @@ def detect_face(image_path):
     return False
 
 
-result = detect_face("dog.jpg")
+result = detect_face("passport.jpg")
 
 print("Face detected:", result)
