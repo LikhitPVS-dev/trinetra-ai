@@ -42,7 +42,9 @@ else:
     # Display extracted face
     cv2.imshow("Extracted Face", face)
 
-    print("Face extracted successfully!")
+    print("\n===================================")
+    print("       FACE EXTRACTED SUCCESSFULLY")
+    print("===================================")
 
     cv2.waitKey(0)
     cv2.destroyAllWindows()
