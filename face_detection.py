@@ -29,5 +29,11 @@ def detect_face(image_path):
 
 
 result = detect_face("passport.jpg")
-
-print("Face detected:", result)
+if result:
+    print("\n===================================")
+    print("       FACE DETECTED")
+    print("===================================")
+else:
+    print("\n===================================")
+    print("       FACE NOT DETECTED")
+    print("===================================")
