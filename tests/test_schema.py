@@ -8,6 +8,9 @@ from SecurityEngine import SecurityEngine
 
 def test_valid_engine_output():
     """Ensure the mock engine generates a completely valid schema."""
+    # Explicitly set the scenario to guarantee test isolation from previous API tests
+    SecurityEngine.demo_scenario = "LOW RISK"
+    
     result_dict = SecurityEngine.analyze_document(passport_img=None, face_img=None)
     # If this fails, the dict structure is broken
     validated = ScreeningResult(**result_dict)
