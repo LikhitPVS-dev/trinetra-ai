@@ -1,7 +1,8 @@
 import streamlit as st
-from PIL import Image
+#from PIL import Image
+import requests
 import datetime
-from SecurityEngine import SecurityEngine
+#from SecurityEngine import SecurityEngine
 
 # ==========================================
 # UI CONFIGURATION & CSS
@@ -37,7 +38,8 @@ def render_sidebar():
         
         with st.expander("⚙ Developer / Demo Mode", expanded=False):
             st.caption("Developer testing only — does not perform real document analysis.")
-            SecurityEngine.demo_scenario = st.selectbox(
+            # Changed to store in session_state instead of setting SecurityEngine directly
+            st.session_state.demo_scenario = st.selectbox(
                 "Scenario Control", 
                 ["LOW RISK", "REVIEW", "HIGH RISK", "INSUFFICIENT EVIDENCE"],
                 label_visibility="collapsed"
@@ -238,6 +240,10 @@ def render_screening_information(processing: dict):
 # MAIN EXECUTION
 # ==========================================
 def main():
+    # Ensure session state has a default
+    if "demo_scenario" not in st.session_state:
+        st.session_state.demo_scenario = "LOW RISK"
+
     render_sidebar()
     render_header()
     
@@ -249,27 +255,45 @@ def main():
             return
             
         try:
-            # Convert inputs
-            passport_img = Image.open(passport_file)
-            face_img = Image.open(face_file) if face_file else None
+            with st.spinner("Processing document through API..."):
+                # 1. Prepare files for HTTP Multipart Form upload
+                files = {
+                    "passport": (passport_file.name, passport_file.getvalue(), passport_file.type)
+                }
+                if face_file:
+                    files["face"] = (face_file.name, face_file.getvalue(), face_file.type)
+                
+                # 2. Pass the selected scenario as form data
+                data = {"scenario": st.session_state.demo_scenario}
+                
+                # 3. HTTP POST to FastAPI
+                api_url = "http://127.0.0.1:8000/analyze"
+                response = requests.post(api_url, files=files, data=data)
             
-            with st.spinner("Processing document through pipeline..."):
-                result = SecurityEngine.analyze_document(passport_img, face_img)
-            
-            # --- FULL WIDTH LAYOUT ORDER ---
-            render_screening_result(result["risk_assessment"])
-            render_verification_pipeline(result)
-            
-            render_document_information(result["document_info"])
-            render_document_integrity(result["ocr"], result["mrz"])
-            render_tampering_analysis(result["tampering"])
-            render_identity_verification(result["face_verification"])
-            render_evidence_and_analysis(result["risk_assessment"])
-            render_officer_review(result["risk_assessment"]["recommendation"])
-            render_screening_information(result["processing"])
+            # 4. Handle HTTP Responses
+            if response.status_code == 200:
+                result = response.json() # Automatically parsed into a dict
+                
+                # --- FULL WIDTH LAYOUT ORDER (Exactly as before) ---
+                render_screening_result(result["risk_assessment"])
+                render_verification_pipeline(result)
+                render_document_information(result["document_info"])
+                render_document_integrity(result["ocr"], result["mrz"])
+                render_tampering_analysis(result["tampering"])
+                render_identity_verification(result["face_verification"])
+                render_evidence_and_analysis(result["risk_assessment"])
+                render_officer_review(result["risk_assessment"]["recommendation"])
+                render_screening_information(result["processing"])
+                
+            else:
+                # Handle API-level errors (400, 500)
+                error_detail = response.json().get("detail", "Unknown API error")
+                st.error(f"API Error ({response.status_code}): {error_detail}")
 
+        except requests.exceptions.ConnectionError:
+            st.error("API Unavailable: Cannot connect to the TRINETRA backend. Ensure FastAPI is running.")
         except Exception as e:
-            st.error("System Fault: An unexpected error occurred during processing.")
+            st.error(f"System Fault: An unexpected UI error occurred.")
 
 if __name__ == "__main__":
     main()
