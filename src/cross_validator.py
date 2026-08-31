@@ -6,17 +6,22 @@ def normalize_text(value):
     if value is None:
         return ""
 
-    value = (
+    return (
         str(value)
         .upper()
         .replace(" ", "")
         .replace("<", "")
     )
 
-    # Common MRZ OCR character correction
-    value = value.replace("1", "I")
 
-    return value
+def normalize_nationality(value):
+    """
+    Normalize nationality/country code for MRZ OCR comparison.
+    MRZ OCR may confuse I with 1.
+    """
+    value = normalize_text(value)
+
+    return value.replace("1", "I")
 
 
 def normalize_date(date_string):
@@ -68,11 +73,19 @@ def cross_validate(passport_data, mrz_data):
     )
 
     # Nationality
+    visual_nationality = normalize_nationality(
+        passport_data.get("country_code")
+    )
+
+    mrz_nationality = normalize_nationality(
+        mrz_data.get("nationality")
+    )
+
     results.append(
         compare_field(
             "nationality",
-            passport_data.get("country_code"),
-            mrz_data.get("nationality")
+            visual_nationality,
+            mrz_nationality
         )
     )
 
