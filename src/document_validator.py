@@ -1,4 +1,5 @@
 from paddleocr import PaddleOCR
+from .tamper_detector import analyze_tamper
 
 from .passport_parser import parse_passport
 from .mrz_parser import parse_mrz
@@ -46,7 +47,7 @@ def validate_document(image_path):
     print("===================================")
 
     # 1. OCR
-    print("\n[1/4] Running OCR...")
+    print("\n[1/5] Running OCR...")
     ocr_texts = extract_ocr_texts(image_path)
 
     if not ocr_texts:
@@ -57,11 +58,11 @@ def validate_document(image_path):
         }
 
     # 2. Visual passport extraction
-    print("[2/4] Extracting passport fields...")
+    print("[2/5] Extracting passport fields...")
     passport_data = parse_passport(ocr_texts)
 
     # 3. MRZ parsing
-    print("[3/4] Parsing MRZ...")
+    print("[3/5] Parsing MRZ...")
 
     mrz_lines = passport_data.get("mrz", [])
 
@@ -76,13 +77,15 @@ def validate_document(image_path):
     mrz_data = parse_mrz(mrz_lines)
 
     # 4. Cross-validation
-    print("[4/4] Cross-validating document...")
+    print("[4/5] Cross-validating document...")
 
     validation = cross_validate(
         passport_data,
         mrz_data
     )
+    print("[5/5] Running tamper detection...")
 
+    tamper_result=analyze_tamper(image_path,validation)
     # Final decision
     if not mrz_data.get("valid", False):
         status = "REVIEW"
@@ -97,10 +100,11 @@ def validate_document(image_path):
         reason = "Document fields do not fully match"
 
     return {
-        "status": status,
-        "reason": reason,
-        "passport_data": passport_data,
-        "mrz_data": mrz_data,
-        "cross_validation": validation,
-        "ocr_texts": ocr_texts
-    }
+    "status": status,
+    "reason": reason,
+    "passport_data": passport_data,
+    "mrz_data": mrz_data,
+    "cross_validation": validation,
+    "tamper": tamper_result,
+    "ocr_texts": ocr_texts
+}
