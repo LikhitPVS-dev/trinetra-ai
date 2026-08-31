@@ -13,7 +13,7 @@ SFACE_MODEL = PROJECT_ROOT / "models" / "face_recognition_sface_2021dec.onnx"
 
 
 class FaceVerifier:
-    
+    COSINE_THRESHOLD = 0.363
     def __init__(self):
         if not YUNET_MODEL.exists():
             raise FileNotFoundError(
@@ -90,3 +90,5 @@ class FaceVerifier:
         )
 
         return float(score)
+    def is_match(self, score: float) -> bool:
+        return score >= self.COSINE_THRESHOLD

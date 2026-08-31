@@ -123,3 +123,10 @@ def test_sface_same_person_comparison():
     print(f"\nSame-person cosine similarity: {score:.6f}")
 
     assert np.isfinite(score)
+def test_match_decision():
+    verifier = FaceVerifier()
+
+    assert verifier.is_match(0.729695) is True
+    assert verifier.is_match(-0.036237) is False
+    assert verifier.is_match(0.363) is True
+    assert verifier.is_match(0.362999) is False
