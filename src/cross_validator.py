@@ -6,12 +6,17 @@ def normalize_text(value):
     if value is None:
         return ""
 
-    return (
+    value = (
         str(value)
         .upper()
         .replace(" ", "")
         .replace("<", "")
     )
+
+    # Common MRZ OCR character correction
+    value = value.replace("1", "I")
+
+    return value
 
 
 def normalize_date(date_string):
