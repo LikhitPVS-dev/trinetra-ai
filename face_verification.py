@@ -21,7 +21,7 @@ class FaceVerifier:
             )
 
         self.detector = cv2.FaceDetectorYN.create(
-            model=str(YUNET_MODEL),
+            model=str(YUNET_MODEL), 
             config="",
             input_size=(320, 320),
             score_threshold=0.6,
