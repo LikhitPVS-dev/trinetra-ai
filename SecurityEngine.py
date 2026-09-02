@@ -48,6 +48,37 @@ class SecurityEngine:
             if os.path.exists(path):
                 os.remove(path)
             raise
+    @staticmethod
+    def _basic_document_check(
+        img: Optional[Image.Image]
+    ) -> tuple[bool, str]:
+        """
+        Fast sanity check before expensive OCR processing.
+
+        This is intentionally conservative:
+        it rejects only obviously unsuitable images and
+        does not attempt to prove that an image is a passport.
+        """
+        if img is None:
+            return False, "No document image was provided."
+
+        try:
+            width, height = img.size
+
+            # Reject extremely small images.
+            if width < 300 or height < 200:
+                return False, "Image resolution is too low for document screening."
+
+        # Reject extreme aspect ratios.
+            aspect_ratio = max(width, height) / min(width, height)
+
+            if aspect_ratio > 3.0:
+                return False, "Image dimensions are unsuitable for a passport document."
+
+            return True, ""
+
+        except Exception:
+            return False, "Unable to inspect the uploaded document image."
 
     @staticmethod
     def analyze_document(
@@ -61,7 +92,39 @@ class SecurityEngine:
             return SecurityEngine._get_demo_result(face_img)
 
         return SecurityEngine._process_real(passport_img, face_img)
+    @staticmethod
+    def _normalize_date(date_value):
+        """
+        Convert MRZ date format YYMMDD to DD/MM/YYYY.
 
+        Human-readable dates are returned unchanged.
+       """
+        if date_value is None:
+            return None
+
+        value = str(date_value).strip()
+
+    # Already human-readable
+        if len(value) == 10 and value[2] == "/" and value[5] == "/":
+            return value
+
+    # MRZ format: YYMMDD
+        if len(value) == 6 and value.isdigit():
+            yy = int(value[0:2])
+            mm = value[2:4]
+            dd = value[4:6]
+
+        # Practical century rule for current passport data.
+            current_year = time.localtime().tm_year % 100
+
+            if yy <= current_year:
+                year = 2000 + yy
+            else:
+                year = 1900 + yy
+
+            return f"{dd}/{mm}/{year}"
+
+        return value
     @staticmethod
     def _process_real(
         passport_img: Optional[Image.Image],
@@ -70,11 +133,24 @@ class SecurityEngine:
 
         start_time = time.time()
         pass_path: Optional[str] = None
+        stage_start = time.time()
 
         if passport_img is None:
             return SecurityEngine._create_insufficient_evidence_result(
                 start_time,
                 "Passport image was not provided."
+            )
+                # --------------------------------------------------
+        # Fast document sanity check
+        # --------------------------------------------------
+        valid_image, check_reason = SecurityEngine._basic_document_check(
+            passport_img
+        )
+
+        if not valid_image:
+            return SecurityEngine._create_insufficient_evidence_result(
+                start_time,
+                check_reason
             )
 
         try:
@@ -85,6 +161,8 @@ class SecurityEngine:
             pass_path = SecurityEngine._save_temp_image(
                 passport_img
             )
+            print(f"[PERF] Save image: {time.time() - stage_start:.2f}s")
+            stage_start = time.time()
 
             # --------------------------------------------------
             # 2. Run Person 1 document pipeline
@@ -96,6 +174,8 @@ class SecurityEngine:
                 )
 
             p1_result = validate_document(pass_path)
+            print(f"[PERF] P1 document pipeline: {time.time() - stage_start:.2f}s")
+            stage_start = time.time()
 
             if not isinstance(p1_result, dict):
                 return SecurityEngine._create_insufficient_evidence_result(
@@ -417,14 +497,13 @@ class SecurityEngine:
                         or doc_data.get("names")
                         or "UNKNOWN"
                     ),
-
-                    "date_of_birth": (
+                    "date_of_birth": SecurityEngine._normalize_date(
                         doc_data.get("date_of_birth")
                         or doc_data.get("dob")
                         or mrz_data.get("date_of_birth")
                     ),
 
-                    "expiry_date": (
+                    "expiry_date": SecurityEngine._normalize_date(
                         doc_data.get("date_of_expiry")
                         or doc_data.get("expiry_date")
                         or mrz_data.get("expiry_date")
@@ -498,7 +577,7 @@ class SecurityEngine:
                     "recommendation": recommendation
                 }
             }
-
+            print(f"[PERF] Result preparation: {time.time() - stage_start:.2f}s")
             # --------------------------------------------------
             # 11. Validate against shared Pydantic contract
             # --------------------------------------------------
@@ -506,6 +585,8 @@ class SecurityEngine:
             validated = ScreeningResult(
                 **result_dict
             )
+            print(f"[PERF] TOTAL: {time.time() - start_time:.2f}s")
+
 
             return validated.model_dump()
 

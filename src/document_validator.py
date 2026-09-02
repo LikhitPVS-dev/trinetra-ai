@@ -1,6 +1,6 @@
 from paddleocr import PaddleOCR
 from .tamper_detector import analyze_tamper
-
+import time
 from .passport_parser import parse_passport
 from .mrz_parser import parse_mrz
 from .cross_validator import cross_validate
@@ -14,7 +14,6 @@ ocr = PaddleOCR(
     use_textline_orientation=True,
     enable_mkldnn=False
 )
-
 
 def extract_ocr_texts(image_path):
     results = ocr.predict(image_path)
@@ -41,6 +40,7 @@ def extract_ocr_texts(image_path):
 
 
 def validate_document(image_path):
+    stage_start = time.time()
 
     print("\n===================================")
     print("       TRINETRA DOCUMENT CHECK")
@@ -49,6 +49,8 @@ def validate_document(image_path):
     # 1. OCR
     print("\n[1/5] Running OCR...")
     ocr_texts = extract_ocr_texts(image_path)
+    print(f"[PERF-P1] OCR: {time.time() - stage_start:.2f}s")
+    stage_start = time.time()
 
     if not ocr_texts:
         return {
@@ -86,6 +88,7 @@ def validate_document(image_path):
     print("[5/5] Running tamper detection...")
 
     tamper_result=analyze_tamper(image_path,validation)
+    print(f"[PERF-P1] Tampering: {time.time() - stage_start:.2f}s")
     # Final decision
     if not mrz_data.get("valid", False):
         status = "REVIEW"
