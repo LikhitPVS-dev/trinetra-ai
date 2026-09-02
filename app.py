@@ -41,7 +41,7 @@ def render_sidebar():
             # Changed to store in session_state instead of setting SecurityEngine directly
             st.session_state.demo_scenario = st.selectbox(
                 "Scenario Control", 
-                ["LOW RISK", "REVIEW", "HIGH RISK", "INSUFFICIENT EVIDENCE"],
+                ["REAL","LOW RISK", "REVIEW", "HIGH RISK", "INSUFFICIENT EVIDENCE"],
                 label_visibility="collapsed"
             )
 
