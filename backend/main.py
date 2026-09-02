@@ -1,5 +1,7 @@
 import time
 from typing import Optional
+import cv2
+import numpy as np
 from fastapi import FastAPI, File, UploadFile, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -13,23 +15,50 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-def build_mock_analysis(scenario: str = "LOW RISK") -> dict:
-    """Provides a compliant full-schema response matching the TRINETRA UI contract."""
+
+def validate_image_bytes(image_bytes: bytes) -> bool:
+    """Verifies that the byte stream can be decoded into a valid image matrix."""
+    if not image_bytes:
+        return False
+    np_arr = np.frombuffer(image_bytes, np.uint8)
+    img = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+    return img is not None and img.size > 0
+
+
+def build_mock_analysis(scenario: str = "LOW RISK", has_face: bool = False) -> dict:
+    """Constructs a compliant schema response matching TRINETRA API contracts."""
     scenario = (scenario or "LOW RISK").upper()
 
     score_map = {
         "LOW RISK": (12, "Document and identity verified. Cleared for standard entry."),
         "REVIEW": (58, "Minor anomalies detected. Recommend secondary officer review."),
         "HIGH RISK": (89, "Critical tampering/checksum failure detected. Flag document."),
-        "INSUFFICIENT EVIDENCE": (0, "Image quality below threshold. Recapture document.")
+        "INSUFFICIENT EVIDENCE": (0, "Image quality below threshold. Recapture document."),
     }
     score, rec = score_map.get(scenario, (15, "Standard clearance."))
 
+    if has_face:
+        face_verification = {
+            "status": "SUCCESS",
+            "is_match": scenario != "HIGH RISK",
+            "match_score": 24 if scenario == "HIGH RISK" else 94,
+        }
+    else:
+        face_verification = {
+            "status": "NOT_PROVIDED",
+            "is_match": False,
+            "match_score": 0,
+        }
+
     return {
         "processing": {
-            "status": "INSUFFICIENT_EVIDENCE" if scenario == "INSUFFICIENT EVIDENCE" else "SUCCESS",
+            "status": (
+                "INSUFFICIENT_EVIDENCE"
+                if scenario == "INSUFFICIENT EVIDENCE"
+                else "SUCCESS"
+            ),
             "processing_time": 0.42,
-            "pipeline_version": "v0.1"
+            "pipeline_version": "v0.1",
         },
         "document_info": {
             "document_type": "P<IND",
@@ -38,12 +67,15 @@ def build_mock_analysis(scenario: str = "LOW RISK") -> dict:
             "surname": "SHARMA",
             "given_names": "VIKRAM",
             "date_of_birth": "1994-08-22",
-            "expiry_date": "2031-08-21"
+            "expiry_date": "2031-08-21",
         },
         "ocr": {
             "status": "SUCCESS",
-            "extracted_text": "P<INDSHARMA<<VIKRAM<<<<<<<<<<<<<<<<<<<<<<<<<<\nZ8921473<4IND9408221M3108218<<<<<<<<<<<<<<<4",
-            "confidence_score": 0.96
+            "extracted_text": (
+                "P<INDSHARMA<<VIKRAM<<<<<<<<<<<<<<<<<<<<<<<<<<\n"
+                "Z8921473<4IND9408221M3108218<<<<<<<<<<<<<<<4"
+            ),
+            "confidence_score": 0.96,
         },
         "mrz": {
             "status": "SUCCESS",
@@ -51,66 +83,91 @@ def build_mock_analysis(scenario: str = "LOW RISK") -> dict:
             "checksums_passed": 2 if scenario == "HIGH RISK" else 5,
             "total_checksums": 5,
             "dob_match": True,
-            "expiry_match": scenario != "HIGH RISK"
+            "expiry_match": scenario != "HIGH RISK",
         },
         "tampering": {
             "status": "SUCCESS",
             "tampering_detected": scenario in ["HIGH RISK", "REVIEW"],
             "tamper_score": 0.84 if scenario == "HIGH RISK" else 0.12,
-            "anomalies": ["ELA compression discontinuity in MRZ zone"] if scenario == "HIGH RISK" else [],
-            "regions": []
+            "anomalies": (
+                ["ELA compression discontinuity in MRZ zone"]
+                if scenario == "HIGH RISK"
+                else []
+            ),
+            "regions": [],
         },
-        "face_verification": {
-            "status": "SUCCESS",
-            "is_match": scenario != "HIGH RISK",
-            "match_score": 24 if scenario == "HIGH RISK" else 94
-        },
+        "face_verification": face_verification,
         "risk_assessment": {
             "risk_level": scenario,
             "overall_score": score,
             "recommendation": rec,
             "evidence": [
-                "ICAO Doc 9303 line checksums validated" if scenario != "HIGH RISK" else "MRZ check digit mismatch",
-                "Facial biometric cosine similarity acceptable" if scenario != "HIGH RISK" else "Facial embedding distance exceeds threshold",
-                "No digital splicing or clone tool artifacts found" if scenario != "HIGH RISK" else "High frequency noise discrepancy on photo region"
-            ]
-        }
+                (
+                    "ICAO Doc 9303 line checksums validated"
+                    if scenario != "HIGH RISK"
+                    else "MRZ check digit mismatch"
+                ),
+                (
+                    "Facial biometric cosine similarity acceptable"
+                    if scenario != "HIGH RISK"
+                    else "Facial embedding distance exceeds threshold"
+                ),
+                (
+                    "No digital splicing or clone tool artifacts found"
+                    if scenario != "HIGH RISK"
+                    else "High frequency noise discrepancy on photo region"
+                ),
+            ],
+        },
     }
 
+
+@app.get("/")
 @app.get("/health")
 def health_check():
-    return {"status": "online", "service": "Trinetra Forensic Engine"}
+    return {"status": "TRINETRA API is running"}
+
 
 @app.post("/analyze")
 async def analyze_document(
     passport: UploadFile = File(...),
     face: Optional[UploadFile] = File(None),
-    scenario: Optional[str] = Form("LOW RISK")
+    scenario: Optional[str] = Form("LOW RISK"),
 ):
-    # Validate uploaded passport extension
     allowed_types = ["image/jpeg", "image/png", "image/jpg"]
     if passport.content_type not in allowed_types:
         raise HTTPException(
             status_code=400,
-            detail=f"Unsupported file type: {passport.content_type}. Only JPEG/PNG are accepted."
+            detail=f"Unsupported passport file type: {passport.content_type}. Only JPEG/PNG are accepted.",
         )
 
     passport_bytes = await passport.read()
-    if len(passport_bytes) == 0:
-        raise HTTPException(status_code=400, detail="Uploaded file is empty.")
+    if not validate_image_bytes(passport_bytes):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid or corrupted passport image.",
+        )
 
-    face_bytes = await face.read() if face else None
+    face_bytes = None
+    has_face = False
+    if face:
+        face_bytes = await face.read()
+        if face_bytes and validate_image_bytes(face_bytes):
+            has_face = True
 
-    # Person 1 integration call
     try:
         from SecurityEngine import SecurityEngine
+
         engine = SecurityEngine()
         if hasattr(engine, "analyze"):
-            return engine.analyze(passport_bytes, face_bytes, scenario=scenario)
+            return engine.analyze(
+                passport_bytes, face_bytes, scenario=scenario
+            )
         if hasattr(engine, "run_full_forensic_pipeline"):
-            return engine.run_full_forensic_pipeline(passport_bytes, face_bytes)
+            return engine.run_full_forensic_pipeline(
+                passport_bytes, face_bytes
+            )
     except Exception:
         pass
 
-    # Safe mock fallback matching app.py schema
-    return build_mock_analysis(scenario or "LOW RISK")
+    return build_mock_analysis(scenario=scenario or "LOW RISK", has_face=has_face)
