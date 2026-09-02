@@ -267,7 +267,9 @@ def main():
                 data = {"scenario": st.session_state.demo_scenario}
                 
                 # 3. HTTP POST to FastAPI
-                api_url = "http://127.0.0.1:8000/analyze"
+                import os
+                # ...
+                api_url = os.getenv("API_URL", "http://127.0.0.1:8000/analyze")  
                 response = requests.post(api_url, files=files, data=data)
             
             # 4. Handle HTTP Responses
