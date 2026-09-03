@@ -130,3 +130,129 @@ def test_match_decision():
     assert verifier.is_match(-0.036237) is False
     assert verifier.is_match(0.363) is True
     assert verifier.is_match(0.362999) is False
+def test_verify_same_person():
+    image1 = cv2.imread("tests/test_face.jpg")
+    image2 = cv2.imread("tests/test_face_same_person.jpg")
+
+    assert image1 is not None
+    assert image2 is not None
+
+    verifier = FaceVerifier()
+
+    result = verifier.verify(image1, image2)
+
+    print(f"\nVerification result: {result}")
+
+    assert result["status"] == "SUCCESS"
+    assert result["provided"] is True
+    assert result["match_score"] is not None
+    assert 0.0 <= result["match_score"] <= 100.0
+    assert result["is_match"] is True
+def test_verify_different_person():
+    image1 = cv2.imread("tests/test_face.jpg")
+    image2 = cv2.imread("tests/test_face_same.jpg")
+
+    assert image1 is not None
+    assert image2 is not None
+
+    verifier = FaceVerifier()
+
+    result = verifier.verify(image1, image2)
+
+    print(f"\nDifferent-person verification result: {result}")
+
+    assert result["status"] == "SUCCESS"
+    assert result["provided"] is True
+    assert result["match_score"] is not None
+    assert 0.0 <= result["match_score"] <= 100.0
+    assert result["is_match"] is False
+def test_verify_no_presented_face():
+    image = cv2.imread("tests/test_face.jpg")
+
+    assert image is not None
+
+    verifier = FaceVerifier()
+
+    result = verifier.verify(image, None)
+
+    print(f"\nNo-presented-face result: {result}")
+
+    assert result["status"] == "NOT_PROVIDED"
+    assert result["provided"] is False
+    assert result["match_score"] is None
+    assert result["is_match"] is None
+def test_verify_no_face():
+    passport_image = np.zeros((500, 500, 3), dtype=np.uint8)
+    presented_image = np.zeros((500, 500, 3), dtype=np.uint8)
+
+    verifier = FaceVerifier()
+
+    result = verifier.verify(passport_image, presented_image)
+
+    print(f"\nNo-face verification result: {result}")
+
+    assert result["status"] == "FAILED"
+    assert result["provided"] is True
+    assert result["match_score"] is None
+    assert result["is_match"] is None
+def test_yunet_detects_multiple_faces():
+    image = cv2.imread("tests/test_face.jpg")
+
+    assert image is not None
+
+    # Put the same face twice side-by-side.
+    multi_face_image = np.hstack((image, image))
+
+    verifier = FaceVerifier()
+    faces = verifier.detect_faces(multi_face_image)
+
+    print(f"\nMultiple-face test detections: {len(faces)}")
+
+    assert len(faces) >= 2
+def test_verify_multiple_faces():
+    image = cv2.imread("tests/test_face.jpg")
+
+    assert image is not None
+
+    # Create an image containing two detectable faces.
+    multi_face_image = np.hstack((image, image))
+
+    verifier = FaceVerifier()
+
+    result = verifier.verify(image, multi_face_image)
+
+    print(f"\nMultiple-face verification result: {result}")
+
+    assert result["status"] == "FAILED"
+    assert result["provided"] is True
+    assert result["match_score"] is None
+    assert result["is_match"] is None
+def test_verify_empty_image():
+    passport_image = np.empty((0, 0, 3), dtype=np.uint8)
+    presented_image = np.empty((0, 0, 3), dtype=np.uint8)
+
+    verifier = FaceVerifier()
+
+    result = verifier.verify(passport_image, presented_image)
+
+    print(f"\nEmpty-image verification result: {result}")
+
+    assert result["status"] == "FAILED"
+    assert result["provided"] is True
+    assert result["match_score"] is None
+    assert result["is_match"] is None
+def test_verify_invalid_input_type():
+    passport_image = cv2.imread("tests/test_face.jpg")
+
+    assert passport_image is not None
+
+    verifier = FaceVerifier()
+
+    result = verifier.verify(passport_image, "not_an_image")
+
+    print(f"\nInvalid-input verification result: {result}")
+
+    assert result["status"] == "FAILED"
+    assert result["provided"] is True
+    assert result["match_score"] is None
+    assert result["is_match"] is None
