@@ -41,7 +41,7 @@ def render_sidebar():
             # Changed to store in session_state instead of setting SecurityEngine directly
             st.session_state.demo_scenario = st.selectbox(
                 "Scenario Control", 
-                ["LOW RISK", "REVIEW", "HIGH RISK", "INSUFFICIENT EVIDENCE"],
+                ["REAL","LOW RISK", "REVIEW", "HIGH RISK", "INSUFFICIENT EVIDENCE"],
                 label_visibility="collapsed"
             )
 
@@ -147,8 +147,8 @@ def render_document_information(doc: dict):
         c4, c5, c6, c7 = st.columns(4)
         c4.caption("Surname"); c4.write(doc.get("surname"))
         c5.caption("Given Names"); c5.write(doc.get("given_names"))
-        c6.caption("Date of Birth"); c6.write(doc.get("date_of_birth"))
-        c7.caption("Expiry Date"); c7.write(doc.get("expiry_date"))
+        st.caption(doc.get("date_of_birth") or "Not available")
+        st.caption(doc.get("expiry_date") or "Not available")
 
 def render_document_integrity(ocr: dict, mrz: dict):
     st.subheader("DOCUMENT INTEGRITY")
