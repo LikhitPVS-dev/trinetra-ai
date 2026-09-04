@@ -50,6 +50,7 @@ def test_valid_passport_only():
     # Pydantic contract dictates these fields must exist
     assert data["face_verification"]["status"] == "NOT_PROVIDED"
     assert data["risk_assessment"]["risk_level"] == "LOW RISK" # Default scenario
+
 def test_passport_and_face():
     passport_path = "tests/test_face.jpg"
     face_path = "tests/test_face_same_person.jpg"
@@ -76,8 +77,7 @@ def test_passport_and_face():
             data={"scenario": "REAL"}
         )
 
-    assert response.status_code == 200
-
+    assert response.status_code == 200    
     result = response.json()
 
     assert result["face_verification"]["status"] == "SUCCESS"
