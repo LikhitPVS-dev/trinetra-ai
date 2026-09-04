@@ -1,6 +1,7 @@
 import io
 from fastapi.testclient import TestClient
 from PIL import Image
+from pathlib import Path
 
 # Import the FastAPI app
 from backend.main import app
@@ -13,6 +14,10 @@ def create_dummy_image(format='JPEG'):
     buf = io.BytesIO()
     img.save(buf, format=format)
     return buf.getvalue()
+def load_test_image(filename):
+    image_path = Path("tests") / filename
+    with open(image_path, "rb") as image_file:
+        return image_file.read()
 
 def test_health_check():
     response = client.get("/")
@@ -48,16 +53,45 @@ def test_valid_passport_only():
     assert data["risk_assessment"]["risk_level"] == "LOW RISK" # Default scenario
 
 def test_passport_and_face():
-    img_bytes = create_dummy_image()
-    files = {
-        "passport": ("pass.jpg", img_bytes, "image/jpeg"),
-        "face": ("face.jpg", img_bytes, "image/jpeg")
-    }
-    response = client.post("/analyze", files=files)
-    
-    assert response.status_code == 200
-    assert response.json()["face_verification"]["status"] == "SUCCESS"
+    passport_bytes = load_test_image("test_face.jpg")
+    face_bytes = load_test_image("test_face_same_person.jpg")
 
+    files = {
+        "passport": ("pass.jpg", passport_bytes, "image/jpeg"),
+        "face": ("face.jpg", face_bytes, "image/jpeg")
+    }
+
+    response = client.post("/analyze", files=files)
+
+    assert response.status_code == 200
+
+    face_result = response.json()["face_verification"]
+    print(f"\nFACE API RESULT: {face_result}")
+    assert face_result["status"] == "SUCCESS"
+    assert face_result["provided"] is True
+    assert face_result["match_score"] is not None
+    assert 0.0 <= face_result["match_score"] <= 100.0
+    assert face_result["is_match"] is True
+def test_passport_and_different_face():
+    passport_bytes = load_test_image("test_face.jpg")
+    face_bytes = load_test_image("test_face_same.jpg")
+
+    files = {
+        "passport": ("pass.jpg", passport_bytes, "image/jpeg"),
+        "face": ("face.jpg", face_bytes, "image/jpeg")
+    }
+
+    response = client.post("/analyze", files=files)
+
+    assert response.status_code == 200
+
+    face_result = response.json()["face_verification"]
+
+    assert face_result["status"] == "SUCCESS"
+    assert face_result["provided"] is True
+    assert face_result["match_score"] is not None
+    assert 0.0 <= face_result["match_score"] <= 100.0
+    assert face_result["is_match"] is False
 # Test Demo Scenarios over HTTP
 def test_demo_scenarios():
     img_bytes = create_dummy_image()

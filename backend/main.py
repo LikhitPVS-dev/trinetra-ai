@@ -147,27 +147,27 @@ async def analyze_document(
             status_code=400,
             detail="Invalid or corrupted passport image.",
         )
+    passport_array = cv2.imdecode(
+        np.frombuffer(passport_bytes, np.uint8),
+        cv2.IMREAD_COLOR
+    )
 
     face_bytes = None
-    has_face = False
+    face_array = None
+
     if face:
         face_bytes = await face.read()
-        if face_bytes and validate_image_bytes(face_bytes):
-            has_face = True
 
-    try:
-        from SecurityEngine import SecurityEngine
+    if face_bytes and validate_image_bytes(face_bytes):
+        face_array = cv2.imdecode(
+            np.frombuffer(face_bytes, np.uint8),
+            cv2.IMREAD_COLOR
+        )
+    from SecurityEngine import SecurityEngine
 
-        engine = SecurityEngine()
-        if hasattr(engine, "analyze"):
-            return engine.analyze(
-                passport_bytes, face_bytes, scenario=scenario
-            )
-        if hasattr(engine, "run_full_forensic_pipeline"):
-            return engine.run_full_forensic_pipeline(
-                passport_bytes, face_bytes
-            )
-    except Exception:
-        pass
+    SecurityEngine.demo_scenario = scenario or "LOW RISK"
 
-    return build_mock_analysis(scenario=scenario or "LOW RISK", has_face=has_face)
+    return SecurityEngine.analyze_document(
+        passport_array,
+        face_array
+    )

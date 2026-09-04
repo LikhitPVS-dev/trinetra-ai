@@ -1,9 +1,13 @@
 import time
 from models.screening import ScreeningResult
+from face_verification import FaceVerifier
+
 
 class SecurityEngine:
-    # Valid options: "LOW RISK", "REVIEW", "HIGH RISK", "INSUFFICIENT EVIDENCE"
-    demo_scenario = "LOW RISK" 
+    demo_scenario = "LOW RISK"
+    face_verifier = None
+    
+  
 
     @staticmethod
     def analyze_document(passport_img, face_img=None) -> dict:
@@ -65,17 +69,32 @@ class SecurityEngine:
                 "recommendation": "Continue normal screening"
             }
         }
+        if face_img is not None:
+            if SecurityEngine.face_verifier is None:
+                SecurityEngine.face_verifier = FaceVerifier()
 
         # Handle face verification input
-        if face_img is not None:
-            result["face_verification"].update({
-                "status": "SUCCESS",
-                "provided": True,
-                "match_score": 92.5,
-                "is_match": True
-            })
-            result["risk_assessment"]["evidence"].append("Live face match verified")
+        # Handle face verification input
+       # Handle face verification input
+       # Handle face verification input
 
+
+            face_result = SecurityEngine.face_verifier.verify(
+                passport_img,
+                face_img
+            )
+
+            result["face_verification"] = face_result
+
+            if face_result["status"] == "SUCCESS":
+                if face_result["is_match"] is True:
+                    result["risk_assessment"]["evidence"].append(
+                        "Live face match verified"
+                    )
+            elif face_result["is_match"] is False:
+                result["risk_assessment"]["evidence"].append(
+                    "Live face does not match document photo"
+                )
         # Apply deterministic scenario modifiers
         if SecurityEngine.demo_scenario == "HIGH RISK":
             result["tampering"].update({
@@ -89,9 +108,7 @@ class SecurityEngine:
                 "evidence": ["Severe tampering anomalies detected in photo region"],
                 "recommendation": "Secondary review recommended before further processing"
             })
-            if face_img:
-                result["face_verification"].update({"match_score": 42.1, "is_match": False})
-                result["risk_assessment"]["evidence"].append("Live face does not match document photo")
+            
 
         elif SecurityEngine.demo_scenario == "REVIEW":
             result["mrz"].update({
