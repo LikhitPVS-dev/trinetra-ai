@@ -1,8 +1,12 @@
+from pathlib import Path
+import sys
 import io
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 from fastapi.testclient import TestClient
 from PIL import Image
 
-# Import the FastAPI app
 from backend.main import app
 
 client = TestClient(app)
@@ -48,15 +52,38 @@ def test_valid_passport_only():
     assert data["risk_assessment"]["risk_level"] == "LOW RISK" # Default scenario
 
 def test_passport_and_face():
-    img_bytes = create_dummy_image()
-    files = {
-        "passport": ("pass.jpg", img_bytes, "image/jpeg"),
-        "face": ("face.jpg", img_bytes, "image/jpeg")
-    }
-    response = client.post("/analyze", files=files)
-    
-    assert response.status_code == 200
-    assert response.json()["face_verification"]["status"] == "SUCCESS"
+    passport_path = "tests/test_face.jpg"
+    face_path = "tests/test_face_same_person.jpg"
+
+    with open(passport_path, "rb") as passport_file, \
+         open(face_path, "rb") as face_file:
+
+        files = {
+            "passport": (
+                "passport.jpg",
+                passport_file,
+                "image/jpeg"
+            ),
+            "face": (
+                "face.jpg",
+                face_file,
+                "image/jpeg"
+            )
+        }
+
+        response = client.post(
+            "/analyze",
+            files=files,
+            data={"scenario": "REAL"}
+        )
+
+    assert response.status_code == 200    
+    result = response.json()
+
+    assert result["face_verification"]["status"] == "SUCCESS"
+    assert result["face_verification"]["provided"] is True
+    assert result["face_verification"]["is_match"] is True
+    assert result["face_verification"]["match_score"] is not None
 
 # Test Demo Scenarios over HTTP
 def test_demo_scenarios():

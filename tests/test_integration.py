@@ -7,7 +7,7 @@ from SecurityEngine import SecurityEngine
 
 @pytest.fixture
 def dummy_image():
-    return Image.new("RGB", (50, 50), color="white")
+    return Image.new("RGB", (300, 200), color="white")
 
 
 @pytest.fixture(autouse=True)
