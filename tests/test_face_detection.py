@@ -1,10 +1,12 @@
 from pathlib import Path
+import sys
 
 import cv2
-
-from face_verification import FaceVerifier
 import numpy as np
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from face_verification import FaceVerifier
 
 def test_yunet_model_loads():
     verifier = FaceVerifier()

@@ -3,8 +3,12 @@ import tempfile
 import os
 from typing import Optional
 
-from PIL import Image
+from PIL import Image, ImageOps
+import cv2
+import numpy as np
+from face_verification import FaceVerifier
 from models.screening import ScreeningResult
+
 
 
 # Import P1 document validator
@@ -29,6 +33,7 @@ class SecurityEngine:
     """
 
     demo_scenario: str = "REAL"
+    face_verifier = None
 
     @staticmethod
     def _save_temp_image(img: Image.Image) -> str:
@@ -48,6 +53,49 @@ class SecurityEngine:
             if os.path.exists(path):
                 os.remove(path)
             raise
+    @staticmethod
+    def _pil_to_cv2(
+        img: Optional[Image.Image]
+    ) -> Optional[np.ndarray]:
+        """
+        Convert a PIL image to an OpenCV BGR NumPy array.
+        Returns None when no image is provided.
+        """
+        if img is None:
+            return None
+
+        if img.mode != "RGB":
+            img = img.convert("RGB")
+
+        rgb_array = np.array(img)
+
+        return cv2.cvtColor(
+            rgb_array,
+            cv2.COLOR_RGB2BGR
+        )
+    @staticmethod
+    def _normalize_document_orientation(
+        img: Optional[Image.Image],
+        ) -> Optional[Image.Image]:
+        """
+        Normalize a document image before screening.
+
+        - Applies EXIF orientation if present.
+        - Rotates portrait-oriented document images 90 degrees
+        so the document is presented in landscape orientation.
+        """
+        if img is None:
+            return None
+
+        # Correct orientation metadata from phone/camera images.
+        img = ImageOps.exif_transpose(img)
+
+    # Passport/document pages are normally landscape.
+    # Rotate images that are clearly taller than they are wide.
+        if img.height > img.width:
+            img = img.rotate(90, expand=True)
+
+        return img
     @staticmethod
     def _basic_document_check(
         img: Optional[Image.Image]
@@ -90,6 +138,8 @@ class SecurityEngine:
         """
         if SecurityEngine.demo_scenario != "REAL":
             return SecurityEngine._get_demo_result(face_img)
+
+        passport_img = SecurityEngine._normalize_document_orientation(passport_img)
 
         return SecurityEngine._process_real(passport_img, face_img)
     @staticmethod
@@ -193,21 +243,49 @@ class SecurityEngine:
                     start_time,
                     reason
                 )
-
             # --------------------------------------------------
             # 3. Face verification
             # --------------------------------------------------
-            #
-            # The face-verification module is not integrated
-            # into this branch yet. Do NOT fabricate a result.
-            #
 
-            face_res = {
-                "status": "NOT_PROVIDED",
-                "provided": False,
-                "match_score": None,
-                "is_match": None
-            }
+            if face_img is None:
+                face_res = {
+                    "status": "NOT_PROVIDED",
+                    "provided": False,
+                    "match_score": None,
+                    "is_match": None
+                }
+
+            else:
+                try:
+                # Convert PIL images to OpenCV/NumPy arrays.
+                    passport_array = SecurityEngine._pil_to_cv2(
+                        passport_img
+                    )
+                    face_array = SecurityEngine._pil_to_cv2(
+                        face_img
+                    )
+
+                # Lazily initialize FaceVerifier only when
+                # a presented face has actually been provided.
+                    if SecurityEngine.face_verifier is None:
+                        SecurityEngine.face_verifier = FaceVerifier()
+
+                    face_res = SecurityEngine.face_verifier.verify(
+                        passport_array,
+                        face_array
+                    )
+
+                except Exception as e:
+                    print(
+                        f"[FACE] Verification failed: {e}"
+                    )
+
+                    face_res = {
+                        "status": "FAILED",
+                        "provided": True,
+                        "match_score": None,
+                        "is_match": None
+                    }
 
             # --------------------------------------------------
             # 4. Extract P1 results
