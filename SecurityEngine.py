@@ -8,7 +8,7 @@ import cv2
 import numpy as np
 from face_verification import FaceVerifier
 from models.screening import ScreeningResult
-
+from src.extractor.passport_face_extractor import extract_passport_face
 
 
 # Import P1 document validator
@@ -28,8 +28,10 @@ class SecurityEngine:
     Demo modes:
         Provide deterministic UI/demo results.
 
-    Face verification is intentionally left as NOT_PROVIDED
-    until the face-verification module is integrated.
+   Face verification:
+    Extracts the passport portrait using YuNet
+    and compares it with the presented person's face
+    using SFace.
     """
 
     demo_scenario: str = "REAL"
@@ -246,6 +248,9 @@ class SecurityEngine:
             # --------------------------------------------------
             # 3. Face verification
             # --------------------------------------------------
+# --------------------------------------------------
+# 3. Face verification
+# --------------------------------------------------
 
             if face_img is None:
                 face_res = {
@@ -257,7 +262,7 @@ class SecurityEngine:
 
             else:
                 try:
-                # Convert PIL images to OpenCV/NumPy arrays.
+                    # Convert PIL images to OpenCV/NumPy arrays.
                     passport_array = SecurityEngine._pil_to_cv2(
                         passport_img
                     )
@@ -265,15 +270,37 @@ class SecurityEngine:
                         face_img
                     )
 
-                # Lazily initialize FaceVerifier only when
-                # a presented face has actually been provided.
-                    if SecurityEngine.face_verifier is None:
-                        SecurityEngine.face_verifier = FaceVerifier()
-
-                    face_res = SecurityEngine.face_verifier.verify(
-                        passport_array,
-                        face_array
+        # Extract the passport portrait using YuNet.
+                    portrait_result = extract_passport_face(
+                        passport_array
                     )
+
+                    if portrait_result["status"] != "success":
+                        print(
+                            "[FACE] Passport portrait extraction failed: "
+                            f"{portrait_result.get('message', 'Unknown error')}"
+                        )
+
+                        face_res = {
+                            "status": "FAILED",
+                            "provided": True,
+                            "match_score": None,
+                            "is_match": None
+                        }
+
+                    else:
+            # Use only the extracted passport portrait
+            # for SFace comparison.
+                        passport_face = portrait_result["crop_array"]
+
+            # Lazily initialize FaceVerifier.
+                        if SecurityEngine.face_verifier is None:
+                            SecurityEngine.face_verifier = FaceVerifier()
+
+                        face_res = SecurityEngine.face_verifier.verify(
+                            passport_face,
+                            face_array
+                        )
 
                 except Exception as e:
                     print(
